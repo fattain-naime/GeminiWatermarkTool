@@ -1,5 +1,12 @@
 # Gemini Watermark Tool
 
+[![C++20](https://img.shields.io/badge/C++-20-blue.svg)](https://en.cppreference.com/w/cpp/20)
+[![Platform](https://img.shields.io/badge/Platform-Windows%20|%20Linux%20|%20macOS%20|%20Android-lightgrey.svg)](#system-requirements)
+[![AI Denoise](https://img.shields.io/badge/AI-FDnCNN%20%2B%20Vulkan%20GPU-green.svg)](#ai-denoise--fdncnn-neural-network-new-in-v025)
+[![MCP](https://img.shields.io/badge/MCP-Server%20Available-blue.svg)](https://github.com/allenk/gwt-integrations)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![GitHub Stars](https://img.shields.io/github/stars/allenk/GeminiWatermarkTool?style=social)](https://github.com/allenk/GeminiWatermarkTool)
+
 > ## 📌 Original Author Notice (Reverse Alpha Blending)
 > I am the original author of **GeminiWatermarkTool** and the reverse **alpha-blending** restoration method used to remove the visible "Gemini" watermark while preserving image detail (Allen Kuo / allenk).
 >
