@@ -192,14 +192,17 @@ endif()
 # =============================================================================
 if(ENABLE_AI_DENOISE)
 
-    # OpenMP (NCNN CPU backend uses OpenMP for parallel inference)
-    find_package(OpenMP)
-
-    if(OPENMP_FOUND)
-        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
-        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
-    endif()
+    # OpenMP disabled — MSVC vcomp140.dll cannot be statically linked.
+    # Enabling OpenMP would require users to install VC++ Redistributable.
+    # NCNN uses Vulkan GPU for inference; OpenMP only affects CPU fallback path.
+    # Uncomment below to re-enable (adds ~10% CPU fallback speed, but requires vcomp140.dll):
+    #
+    # find_package(OpenMP)
+    # if(OPENMP_FOUND)
+    #     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
+    #     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+    #     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
+    # endif()
 
     set(NCNN_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/external/ncnn/ncnn-20260113-src")
 
@@ -241,7 +244,7 @@ if(ENABLE_AI_DENOISE)
 
     # Performance options
     set(NCNN_ENABLE_LTO ON CACHE BOOL "" FORCE)
-    set(NCNN_OPENMP ON CACHE BOOL "" FORCE)
+    set(NCNN_OPENMP OFF CACHE BOOL "" FORCE)
 
     # -------------------------------------------------------------------------
     # Minimal layer set for FDnCNN
@@ -510,7 +513,7 @@ message(STATUS "  ENABLE_AI_DENOISE: ${ENABLE_AI_DENOISE}")
 if(ENABLE_AI_DENOISE)
     message(STATUS "    NCNN: Static lib, Vulkan GPU + CPU fallback")
     message(STATUS "    Model: FDnCNN Color (embedded FP16, ~1.3 MB)")
-    message(STATUS "    OpenMP: ${OPENMP_FOUND}")
+    message(STATUS "    OpenMP: OFF (standalone, no VCOMP140.DLL dependency)")
 endif()
 if(APPLE)
     message(STATUS "")
