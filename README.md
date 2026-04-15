@@ -310,6 +310,33 @@ Download the latest release from the [Releases](https://github.com/allenk/Gemini
 | macOS | `GeminiWatermarkTool-macOS-Universal` | Intel + Apple Silicon |
 | Android | `GeminiWatermarkTool-Android-arm64` | ARM64 |
 
+### gwt-mini — Minimal CLI Build
+
+A separate, much smaller CLI-only build is published alongside each release for users
+who do not need the desktop GUI (servers, CI pipelines, scripted batch processing).
+`gwt-mini` keeps full functionality — reverse alpha blending, three-stage NCC
+detection, snap search, and AI denoise (NCNN + embedded FDnCNN weights) — and drops
+only the ImGui / SDL3 / GPU-backend stack. Windows and Linux builds are additionally
+UPX-compressed.
+
+| Platform | File | Approx. size |
+|----------|------|--------------|
+| Windows | `gwt-mini-windows-x64.zip` | ~5 MB (UPX) |
+| Linux | `gwt-mini-linux-x64.zip` | ~7 MB (UPX) |
+| macOS | `gwt-mini-macos-universal.zip` | ~23 MB (universal, no UPX) |
+
+CLI flags are identical to the full build — see [CLI — Quick Start](#cli--quick-start).
+
+Caveats:
+- Some corporate antivirus engines (Defender ATP, CrowdStrike, etc.) may flag UPX-packed
+  executables as suspicious. If that is a concern, use the full `GeminiWatermarkTool`
+  binary instead — it is not packed.
+- UPX adds a small one-off decompression cost at startup (~20–50 ms).
+- macOS is not UPX-compressed: UPX interacts badly with codesigning and Gatekeeper on
+  modern macOS.
+
+To build `gwt-mini` yourself, see [Build — gwt-mini (minimal CLI)](#build--gwt-mini-minimal-cli) below.
+
 ### First Run — OS Security Prompts
 
 Downloaded binaries are not code-signed, so your OS may show a security warning on first launch. This is normal for open-source software distributed outside app stores.
@@ -628,6 +655,29 @@ cmake -B build -G Ninja \
 
 cmake --build build
 ```
+
+### Build — gwt-mini (minimal CLI)
+
+For the published `gwt-mini` variant: GUI off, AI denoise on, no video pipeline.
+
+```bash
+# Linux
+cmake -B build-mini -G Ninja \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DBUILD_GUI=OFF \
+  -DENABLE_AI_DENOISE=ON \
+  -DENABLE_VIDEO=OFF \
+  -DVCPKG_MANIFEST_FEATURES="ai-denoise" \
+  -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake
+cmake --build build-mini
+strip build-mini/GeminiWatermarkTool
+# Optional: shrink further with UPX
+upx --best --lzma build-mini/GeminiWatermarkTool
+```
+
+On Windows add `-DVCPKG_TARGET_TRIPLET=x64-windows-static -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded`.
+On macOS build x86_64 and arm64 separately, then `lipo -create` them into a universal binary
+(same recipe as `mac-universal-Release`, just with the flags above).
 
 ---
 

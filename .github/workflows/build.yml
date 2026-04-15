@@ -21,6 +21,10 @@ on:
       - '.gitignore'
   workflow_dispatch:
 
+env:
+  VCPKG_COMMIT: '594ad8871e1e8e45f8e626c015fd611163430207'
+  UPX_VERSION: '4.2.4'
+
 jobs:
   # ===========================================================================
   # Windows Build
@@ -175,10 +179,187 @@ jobs:
         path: GeminiWatermarkTool
 
   # ===========================================================================
+  # gwt-mini: minimal CLI build (no GUI, AI denoise ON, UPX on win/linux)
+  # ===========================================================================
+  mini-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT }}
+
+      - name: Configure & Build (mini)
+        shell: bash
+        run: |
+          cmake -B build-mini -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_GUI=OFF \
+            -DENABLE_AI_DENOISE=ON \
+            -DENABLE_VIDEO=OFF \
+            -DVCPKG_MANIFEST_FEATURES="ai-denoise" \
+            -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake \
+            -DVCPKG_TARGET_TRIPLET=x64-windows-static \
+            -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded
+          cmake --build build-mini
+
+      - name: Rename binary
+        shell: bash
+        run: |
+          cp build-mini/GeminiWatermarkTool.exe gwt-mini.exe
+          echo "--- size before UPX ---"
+          ls -lh gwt-mini.exe
+
+      - name: Install UPX
+        shell: bash
+        run: |
+          curl -L -o upx.zip "https://github.com/upx/upx/releases/download/v${UPX_VERSION}/upx-${UPX_VERSION}-win64.zip"
+          unzip -j upx.zip "*/upx.exe" -d .
+          ./upx.exe --version
+
+      - name: UPX compress
+        shell: bash
+        run: |
+          ./upx.exe --best --lzma gwt-mini.exe
+          echo "--- size after UPX ---"
+          ls -lh gwt-mini.exe
+
+      - name: Smoke test
+        shell: bash
+        run: ./gwt-mini.exe --version
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gwt-mini-windows-x64
+          path: gwt-mini.exe
+
+  mini-linux:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install deps (ninja, vulkan loader, upx)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build libvulkan-dev upx-ucl
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT }}
+
+      - name: Configure & Build (mini)
+        run: |
+          cmake -B build-mini -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_GUI=OFF \
+            -DENABLE_AI_DENOISE=ON \
+            -DENABLE_VIDEO=OFF \
+            -DVCPKG_MANIFEST_FEATURES="ai-denoise" \
+            -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake
+          cmake --build build-mini
+
+      - name: Rename + strip
+        run: |
+          cp build-mini/GeminiWatermarkTool gwt-mini
+          strip gwt-mini
+          echo "--- size after strip ---"
+          ls -lh gwt-mini
+
+      - name: UPX compress
+        run: |
+          upx --best --lzma gwt-mini
+          echo "--- size after UPX ---"
+          ls -lh gwt-mini
+
+      - name: Smoke test
+        run: ./gwt-mini --version
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gwt-mini-linux-x64
+          path: gwt-mini
+
+  mini-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install ninja
+        run: brew list ninja >/dev/null 2>&1 || brew install ninja
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT }}
+
+      - name: Build x86_64
+        run: |
+          cmake -B build-mini-x64 -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_GUI=OFF \
+            -DENABLE_AI_DENOISE=ON \
+            -DENABLE_VIDEO=OFF \
+            -DVCPKG_MANIFEST_FEATURES="ai-denoise" \
+            -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake \
+            -DVCPKG_TARGET_TRIPLET=x64-osx \
+            -DCMAKE_OSX_ARCHITECTURES=x86_64
+          cmake --build build-mini-x64
+
+      - name: Build arm64
+        run: |
+          cmake -B build-mini-arm64 -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_GUI=OFF \
+            -DENABLE_AI_DENOISE=ON \
+            -DENABLE_VIDEO=OFF \
+            -DVCPKG_MANIFEST_FEATURES="ai-denoise" \
+            -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake \
+            -DVCPKG_TARGET_TRIPLET=arm64-osx \
+            -DCMAKE_OSX_ARCHITECTURES=arm64
+          cmake --build build-mini-arm64
+
+      - name: Lipo + strip + ad-hoc codesign
+        run: |
+          lipo -create \
+            build-mini-x64/GeminiWatermarkTool \
+            build-mini-arm64/GeminiWatermarkTool \
+            -output gwt-mini
+          strip gwt-mini
+          codesign --force -s - gwt-mini
+          codesign -vv gwt-mini
+          echo "--- final size (no UPX on macOS) ---"
+          ls -lh gwt-mini
+
+      - name: Smoke test
+        run: ./gwt-mini --version
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gwt-mini-macos-universal
+          path: gwt-mini
+
+  # ===========================================================================
   # Release (on tag push)
   # ===========================================================================
   release:
-    needs: [build-windows, build-linux, build-macos]
+    needs: [build-windows, build-linux, build-macos, mini-windows, mini-linux, mini-macos]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:
@@ -210,6 +391,7 @@ jobs:
 
     - name: Prepare release files
       run: |
+        # --- Full builds (GUI + AI denoise) ---
         # Windows
         cp GeminiWatermarkTool-Windows-x64/GeminiWatermarkTool.exe ./GeminiWatermarkTool.exe
         zip GeminiWatermarkTool-Windows-x64.zip GeminiWatermarkTool.exe
@@ -227,6 +409,24 @@ jobs:
         zip GeminiWatermarkTool-macOS-Universal.zip GeminiWatermarkTool
         rm GeminiWatermarkTool
 
+        # --- gwt-mini (CLI only, no GUI, UPX on win/linux) ---
+        # Windows mini
+        cp gwt-mini-windows-x64/gwt-mini.exe ./gwt-mini.exe
+        zip gwt-mini-windows-x64.zip gwt-mini.exe
+        rm gwt-mini.exe
+
+        # Linux mini
+        cp gwt-mini-linux-x64/gwt-mini ./gwt-mini
+        chmod +x gwt-mini
+        zip gwt-mini-linux-x64.zip gwt-mini
+        rm gwt-mini
+
+        # macOS mini
+        cp gwt-mini-macos-universal/gwt-mini ./gwt-mini
+        chmod +x gwt-mini
+        zip gwt-mini-macos-universal.zip gwt-mini
+        rm gwt-mini
+
     - name: Create Release
       uses: softprops/action-gh-release@v1
       with:
@@ -235,6 +435,9 @@ jobs:
           GeminiWatermarkTool-Windows-x64.zip
           GeminiWatermarkTool-Linux-x64.zip
           GeminiWatermarkTool-macOS-Universal.zip
+          gwt-mini-windows-x64.zip
+          gwt-mini-linux-x64.zip
+          gwt-mini-macos-universal.zip
         draft: false
         prerelease: false
       env:
